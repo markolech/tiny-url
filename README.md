@@ -84,41 +84,29 @@ go build -o tiny-url-service
 
 ### Running the Service
 
-#### Option 1: In-Memory Storage (Default)
+#### Local Development
 ```bash
-# Default configuration (port 8080)
-./tiny-url-service
+# In-memory storage (quick start)
+go run .
 
-# Or explicitly specify
-STORAGE_TYPE=memory ./tiny-url-service
-```
-
-#### Option 2: Redis Storage (Recommended for Production)
-```bash
-# Start Redis with Docker Compose
+# With Redis persistence
 docker-compose up -d
-
-# Run service with Redis
-STORAGE_TYPE=redis ./tiny-url-service
-
-# Custom configuration with Redis
-PORT=9000 \
-STORAGE_TYPE=redis \
-REDIS_URL=redis://localhost:6379/0 \
-BASE_URL=https://yourdomain.com \
-./tiny-url-service
+STORAGE_TYPE=redis go run .
 ```
+
+#### Live Demo
+The service is deployed on Railway with managed Redis:
+- **Demo URL**: https://tiny-url-production.up.railway.app
+- **Health Check**: https://tiny-url-production.up.railway.app/health
+- **API Testing**: Use the live API for demonstrations
 
 #### Docker Commands
 ```bash
-# Start Redis
+# Start Redis locally
 docker-compose up -d
 
 # Stop Redis
 docker-compose down
-
-# View Redis logs
-docker-compose logs redis
 
 # Access Redis CLI
 docker exec -it tiny-url-redis redis-cli
@@ -245,8 +233,11 @@ tiny-url/
 ├── tests/
 │   ├── integration_test.go   # Integration tests
 │   └── benchmark_test.go     # Performance benchmarks
-└── scripts/
-    └── tests/                # Automated test scripts
+├── scripts/
+│   └── tests/                # Automated test scripts
+└── docs/
+    ├── ARCHITECTURE.md       # System architecture documentation
+    └── API.md                # API reference and examples
 ```
 
 ### Key Components
@@ -300,6 +291,12 @@ Based on benchmark tests:
 | Redirect (HTTP) | ~20K req/sec | - |
 
 **Race Condition Testing**: ✅ All concurrent access tests pass with `-race` flag for both storage backends
+
+## 📚 Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design, components, and data flow
+- **[API Reference](docs/API.md)** - Complete API documentation with examples
+- **[Project Plan](plan.md)** - Development phases and Railway deployment setup
 
 ## Code Quality
 - All code includes unit tests
