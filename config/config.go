@@ -15,6 +15,10 @@ type Config struct {
 	WriteTimeout   time.Duration
 	IdleTimeout    time.Duration
 	ShutdownTimeout time.Duration
+	
+	// Storage configuration
+	StorageType string // "memory" or "redis"
+	RedisURL    string // Redis connection URL
 }
 
 // Load loads configuration from environment variables with sensible defaults
@@ -27,6 +31,10 @@ func Load() *Config {
 		WriteTimeout:    getEnvAsDuration("WRITE_TIMEOUT", "10s"),
 		IdleTimeout:     getEnvAsDuration("IDLE_TIMEOUT", "60s"),
 		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", "30s"),
+		
+		// Storage configuration
+		StorageType:     getEnv("STORAGE_TYPE", "memory"),
+		RedisURL:        getEnv("REDIS_URL", "redis://localhost:6379/0"),
 	}
 }
 
