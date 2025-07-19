@@ -2,21 +2,21 @@ package main
 
 import (
 	"log"
+	"tiny-url-service/config"
 	"tiny-url-service/handlers"
 	"tiny-url-service/storage"
 )
 
 func main() {
-	// Configuration
-	baseURL := "http://localhost:8080"
-	port := 8080
+	// Load configuration from environment variables
+	cfg := config.Load()
 	
 	// Initialize storage
-	store := storage.NewMemoryStorage(baseURL)
+	store := storage.NewMemoryStorage(cfg.BaseURL)
 	
-	// Start HTTP server
+	// Start HTTP server with graceful shutdown
 	log.Println("Initializing Tiny URL Service...")
-	if err := handlers.StartServer(store, baseURL, port); err != nil {
+	if err := handlers.StartServer(store, cfg); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 } 

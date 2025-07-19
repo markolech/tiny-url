@@ -1,28 +1,36 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+	"tiny-url-service/config"
 	"tiny-url-service/storage"
 
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRouter creates and configures the Gin router with all routes and middleware
-func SetupRouter(store storage.Storage, baseURL string) *gin.Engine {
-	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
-	gin.SetMode(gin.ReleaseMode)
+func SetupRouter(store storage.Storage, cfg *config.Config) *gin.Engine {
+	// Set Gin mode from configuration
+	gin.SetMode(cfg.GinMode)
 	
 	// Create Gin router
 	r := gin.New()
 	
 	// Add middleware
-	r.Use(gin.Logger())    // Request logging
-	r.Use(gin.Recovery())  // Panic recovery
-	r.Use(CORSMiddleware()) // CORS headers
+	r.Use(gin.Logger())           // Request logging
+	r.Use(gin.Recovery())         // Panic recovery
+	r.Use(CORSMiddleware())       // CORS headers
+	r.Use(ContentTypeMiddleware()) // Content-Type validation
 	
 	// Create handlers instance
-	handlers := NewURLHandlers(store, baseURL)
+	handlers := NewURLHandlers(store, cfg.BaseURL)
 	
 	// Setup routes
 	r.POST("/urls", handlers.CreateShortURL)
@@ -58,17 +66,75 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-// StartServer starts the HTTP server on the specified port
-func StartServer(store storage.Storage, baseURL string, port int) error {
-	router := SetupRouter(store, baseURL)
+// ContentTypeMiddleware validates Content-Type for POST requests
+func ContentTypeMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Only validate Content-Type for POST requests
+		if c.Request.Method == "POST" {
+			contentType := c.GetHeader("Content-Type")
+			if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+				c.JSON(400, gin.H{
+					"error": "Content-Type must be application/json",
+				})
+				c.Abort()
+				return
+			}
+		}
+		c.Next()
+	}
+}
+
+// StartServer starts the HTTP server with proper configuration, timeouts, and graceful shutdown
+func StartServer(store storage.Storage, cfg *config.Config) error {
+	router := SetupRouter(store, cfg)
 	
-	address := fmt.Sprintf(":%d", port)
-	log.Printf("🚀 Tiny URL service starting on %s", address)
-	log.Printf("📊 Health check available at: %s/health", baseURL)
-	log.Printf("📝 API documentation:")
-	log.Printf("   POST %s/urls - Create short URL", baseURL)
-	log.Printf("   GET  %s/{shortCode} - Redirect to long URL", baseURL)
-	log.Printf("   GET  %s/urls/{shortCode}/stats - Get URL stats", baseURL)
+	// Create HTTP server with timeouts
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           router,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	
-	return router.Run(address)
+	// Channel to listen for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	
+	// Start server in a goroutine
+	go func() {
+		log.Printf("🚀 Tiny URL service starting on :%d", cfg.Port)
+		log.Printf("📊 Health check available at: %s/health", cfg.BaseURL)
+		log.Printf("📝 API documentation:")
+		log.Printf("   POST %s/urls - Create short URL", cfg.BaseURL)
+		log.Printf("   GET  %s/{shortCode} - Redirect to long URL", cfg.BaseURL)
+		log.Printf("   GET  %s/urls/{shortCode}/stats - Get URL stats", cfg.BaseURL)
+		log.Printf("⚙️  Configuration:")
+		log.Printf("   Mode: %s", cfg.GinMode)
+		log.Printf("   Read timeout: %v", cfg.ReadTimeout)
+		log.Printf("   Write timeout: %v", cfg.WriteTimeout)
+		log.Printf("   Idle timeout: %v", cfg.IdleTimeout)
+		
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+	
+	// Wait for interrupt signal
+	<-quit
+	log.Println("🛑 Shutting down server...")
+	
+	// Create context with timeout for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	
+	// Attempt graceful shutdown
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("❌ Server forced to shutdown: %v", err)
+		return err
+	}
+	
+	log.Println("✅ Server exited gracefully")
+	return nil
 } 
