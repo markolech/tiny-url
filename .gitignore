@@ -26,4 +26,7 @@ go.work
 
 # OS files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Project planning
+plan.md 
