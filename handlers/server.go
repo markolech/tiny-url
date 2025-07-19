@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 	"tiny-url-service/config"
+	"tiny-url-service/middleware"
 	"tiny-url-service/storage"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ func SetupRouter(store storage.Storage, cfg *config.Config) *gin.Engine {
 	r.Use(gin.Recovery())         // Panic recovery
 	r.Use(CORSMiddleware())       // CORS headers
 	r.Use(ContentTypeMiddleware()) // Content-Type validation
+	r.Use(middleware.NewInMemoryRateLimiter()) // Rate limiting
 	
 	// Create handlers instance
 	handlers := NewURLHandlers(store, cfg.BaseURL)
