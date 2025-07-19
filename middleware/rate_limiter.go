@@ -79,6 +79,7 @@ func (rl *InMemoryRateLimiter) middleware() gin.HandlerFunc {
 		c.Header("X-RateLimit-Limit", "20")
 		c.Header("X-RateLimit-Window", "60")
 		c.Header("X-RateLimit-Remaining", strconv.Itoa(remainingTokens))
+		c.Header("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(60*time.Second).Unix(), 10))
 		
 		if !allowed {
 			// Rate limited

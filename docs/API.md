@@ -100,13 +100,23 @@ console.log(data.short_url); // http://localhost:8080/1
 
 ```http
 400 Bad Request - Invalid URL format or JSON
-404 Not Found - Short code doesn't exist  
+404 Not Found - Short code doesn't exist
+429 Too Many Requests - Rate limit exceeded (20 req/min per IP)
 500 Internal Server Error - Storage error
 ```
+
+## Rate Limiting
+
+The API implements per-IP rate limiting:
+- **Limit**: 20 requests per minute per IP address
+- **Algorithm**: Token bucket with automatic refill
+- **Headers**: Returns `X-RateLimit-*` headers in responses
+- **Response**: 429 status with retry-after information when exceeded
 
 ## Notes
 
 - URLs must start with `http://` or `https://`
 - Short codes use Base62 encoding (`0-9A-Za-z`)
 - Expired URLs return 404 when accessed
-- CORS enabled for browser requests 
+- CORS enabled for browser requests
+- Rate limiting applies to all endpoints per IP address 

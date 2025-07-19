@@ -360,6 +360,11 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 			defer resp.Body.Close()
 
+			if resp.StatusCode == http.StatusTooManyRequests {
+				// Rate limited - this is expected behavior
+				return
+			}
+			
 			if resp.StatusCode != http.StatusOK {
 				errors <- fmt.Errorf("unexpected status: %d", resp.StatusCode)
 				return
@@ -398,12 +403,13 @@ func TestConcurrentAccess(t *testing.T) {
 		shortCodes[shortCode] = true
 	}
 
-	if resultCount != numRequests {
-		t.Errorf("Expected %d results, got %d", numRequests, resultCount)
+	// With rate limiting (20 req/min), we expect fewer successful results
+	if resultCount < 15 || resultCount > 25 {
+		t.Errorf("Expected ~20 successful results (15-25 range), got %d", resultCount)
 	}
 
-	if len(shortCodes) != numRequests {
-		t.Errorf("Expected %d unique short codes, got %d", numRequests, len(shortCodes))
+	if len(shortCodes) != resultCount {
+		t.Errorf("Expected %d unique short codes, got %d", resultCount, len(shortCodes))
 	}
 
 	t.Logf("Successfully created %d unique short URLs concurrently", len(shortCodes))
@@ -459,6 +465,9 @@ func TestConcurrentRedirects(t *testing.T) {
 
 			if resp.StatusCode == http.StatusFound {
 				successCount <- true
+			} else if resp.StatusCode == http.StatusTooManyRequests {
+				// Rate limited - expected behavior
+				successCount <- false
 			} else {
 				successCount <- false
 			}
@@ -475,8 +484,9 @@ func TestConcurrentRedirects(t *testing.T) {
 		}
 	}
 
-	if successful != numRequests {
-		t.Errorf("Expected %d successful redirects, got %d", numRequests, successful)
+	// With rate limiting, we expect fewer successful redirects  
+	if successful < 15 || successful > 25 {
+		t.Errorf("Expected ~20 successful redirects (15-25 range), got %d", successful)
 	}
 
 	t.Logf("Successfully handled %d concurrent redirects", successful)

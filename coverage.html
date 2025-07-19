@@ -1,0 +1,348 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>storage: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">tiny-url-service/storage/memory.go (100.0%)</option>
+				
+				<option value="file1">tiny-url-service/storage/redis.go (73.6%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package storage
+
+import (
+        "fmt"
+        "sync"
+        "sync/atomic"
+        "time"
+        "tiny-url-service/models"
+        "tiny-url-service/utils"
+)
+
+// MemoryStorage implements the Storage interface using in-memory maps
+type MemoryStorage struct {
+        mu       sync.RWMutex                 // Protects the maps
+        urls     map[string]*models.URLMapping // shortCode -&gt; URLMapping
+        counter  uint64                       // Atomic counter for unique IDs
+        baseURL  string                       // Base URL for generating short URLs
+}
+
+// NewMemoryStorage creates a new in-memory storage instance
+func NewMemoryStorage(baseURL string) *MemoryStorage <span class="cov8" title="1">{
+        return &amp;MemoryStorage{
+                urls:    make(map[string]*models.URLMapping),
+                counter: 0,
+                baseURL: baseURL,
+        }
+}</span>
+
+// Store saves a URL mapping and returns the generated short code
+func (m *MemoryStorage) Store(mapping *models.URLMapping) (string, error) <span class="cov8" title="1">{
+        // Generate unique ID
+        id := atomic.AddUint64(&amp;m.counter, 1)
+        
+        // Generate short code using base62 encoding
+        shortCode := utils.EncodeBase62(id)
+        
+        // Complete the mapping
+        mapping.ID = id
+        mapping.ShortCode = shortCode
+        mapping.CreatedAt = time.Now()
+        
+        // Store with write lock
+        m.mu.Lock()
+        m.urls[shortCode] = mapping
+        m.mu.Unlock()
+        
+        return shortCode, nil
+}</span>
+
+// Get retrieves the URL mapping for a given short code
+func (m *MemoryStorage) Get(shortCode string) (*models.URLMapping, error) <span class="cov8" title="1">{
+        m.mu.RLock()
+        mapping, exists := m.urls[shortCode]
+        m.mu.RUnlock()
+        
+        if !exists </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("short code not found: %s", shortCode)
+        }</span>
+        
+        // Check if expired
+        <span class="cov8" title="1">if m.IsExpired(mapping) </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("URL has expired: %s", shortCode)
+        }</span>
+        
+        <span class="cov8" title="1">return mapping, nil</span>
+}
+
+// IsExpired checks if a URL mapping has expired
+func (m *MemoryStorage) IsExpired(mapping *models.URLMapping) bool <span class="cov8" title="1">{
+        if mapping.ExpirationDate == nil </span><span class="cov8" title="1">{
+                return false // No expiration set
+        }</span>
+        <span class="cov8" title="1">return time.Now().After(*mapping.ExpirationDate)</span>
+}
+
+// GetStats returns storage statistics
+func (m *MemoryStorage) GetStats() map[string]interface{} <span class="cov8" title="1">{
+        m.mu.RLock()
+        totalUrls := len(m.urls)
+        m.mu.RUnlock()
+        
+        currentCounter := atomic.LoadUint64(&amp;m.counter)
+        
+        return map[string]interface{}{
+                "total_urls":      totalUrls,
+                "current_counter": currentCounter,
+                "storage_type":    "memory",
+        }
+}</span> </pre>
+		
+		<pre class="file" id="file1" style="display: none">package storage
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "sync/atomic"
+        "time"
+        "tiny-url-service/models"
+        "tiny-url-service/utils"
+
+        "github.com/redis/go-redis/v9"
+)
+
+type RedisStorage struct {
+        client  *redis.Client
+        baseURL string
+        ctx     context.Context
+        counter uint64 // Local counter, synced with Redis
+}
+
+func NewRedisStorage(baseURL, redisURL string) (*RedisStorage, error) <span class="cov8" title="1">{
+        opts, err := redis.ParseURL(redisURL)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">client := redis.NewClient(opts)
+        ctx := context.Background()
+
+        // Test connection
+        if err := client.Ping(ctx).Err(); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">storage := &amp;RedisStorage{
+                client:  client,
+                baseURL: baseURL,
+                ctx:     ctx,
+        }
+
+        // Initialize counter from Redis
+        if err := storage.initCounter(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to initialize counter: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return storage, nil</span>
+}
+
+func (r *RedisStorage) initCounter() error <span class="cov8" title="1">{
+        // Get current counter value from Redis, or start at 0
+        val, err := r.client.Get(r.ctx, "counter").Uint64()
+        if err == redis.Nil </span><span class="cov8" title="1">{
+                // Counter doesn't exist, start at 0
+                atomic.StoreUint64(&amp;r.counter, 0)
+                return nil
+        }</span>
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">atomic.StoreUint64(&amp;r.counter, val)
+        return nil</span>
+}
+
+// Store saves a URL mapping and returns the generated short code
+func (r *RedisStorage) Store(mapping *models.URLMapping) (string, error) <span class="cov8" title="1">{
+        // Generate unique ID using Redis INCR for atomicity across instances
+        id, err := r.client.Incr(r.ctx, "counter").Result()
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to generate ID: %w", err)
+        }</span>
+
+        // Generate short code using base62 encoding
+        <span class="cov8" title="1">shortCode := utils.EncodeBase62(uint64(id))
+
+        // Complete the mapping
+        mapping.ID = uint64(id)
+        mapping.ShortCode = shortCode
+        mapping.CreatedAt = time.Now()
+
+        // Serialize mapping to JSON
+        data, err := json.Marshal(mapping)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to marshal URL mapping: %w", err)
+        }</span>
+
+        // Store in Redis
+        <span class="cov8" title="1">if err := r.client.Set(r.ctx, "url:"+shortCode, data, 0).Err(); err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to store URL mapping in Redis: %w", err)
+        }</span>
+
+        // Update local counter
+        <span class="cov8" title="1">atomic.StoreUint64(&amp;r.counter, uint64(id))
+
+        return shortCode, nil</span>
+}
+
+// Get retrieves the URL mapping for a given short code
+func (r *RedisStorage) Get(shortCode string) (*models.URLMapping, error) <span class="cov8" title="1">{
+        data, err := r.client.Get(r.ctx, "url:"+shortCode).Result()
+        if err == redis.Nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("short code not found: %s", shortCode)
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get URL mapping from Redis: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">var mapping models.URLMapping
+        if err := json.Unmarshal([]byte(data), &amp;mapping); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to unmarshal URL mapping: %w", err)
+        }</span>
+
+        // Check if expired
+        <span class="cov8" title="1">if r.IsExpired(&amp;mapping) </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("URL has expired: %s", shortCode)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;mapping, nil</span>
+}
+
+// IsExpired checks if a URL mapping has expired
+func (r *RedisStorage) IsExpired(mapping *models.URLMapping) bool <span class="cov8" title="1">{
+        if mapping.ExpirationDate == nil </span><span class="cov8" title="1">{
+                return false // No expiration set
+        }</span>
+        <span class="cov8" title="1">return time.Now().After(*mapping.ExpirationDate)</span>
+}
+
+// GetStats returns storage statistics
+func (r *RedisStorage) GetStats() map[string]interface{} <span class="cov8" title="1">{
+        // Get current counter
+        currentCounter := atomic.LoadUint64(&amp;r.counter)
+
+        // Count total URLs (this is expensive for large datasets)
+        totalUrls, err := r.client.Eval(r.ctx, `
+                local keys = redis.call('KEYS', 'url:*')
+                return #keys
+        `, []string{}).Result()
+
+        if err != nil </span><span class="cov0" title="0">{
+                totalUrls = 0
+        }</span>
+
+        <span class="cov8" title="1">return map[string]interface{}{
+                "total_urls":      totalUrls,
+                "current_counter": currentCounter,
+                "storage_type":    "redis",
+        }</span>
+}
+
+// Close closes the Redis connection
+func (r *RedisStorage) Close() error <span class="cov0" title="0">{
+        return r.client.Close()
+}</span> </pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

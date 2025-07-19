@@ -15,8 +15,7 @@ graph TB
     
     subgraph "HTTP Server"
         C["Gin HTTP Server<br/>Port 8080"]
-        D[Middleware Stack]
-        E[CORS + Logger + Recovery]
+        D[CORS + Logger + Recovery + Rate Limiter]
     end
     
     subgraph "API Endpoints"
@@ -34,24 +33,18 @@ graph TB
     
     subgraph "Storage Layer"
         M[Storage Interface]
-        N[Memory Storage]
-        O[Redis Storage]
-    end
-    
-    subgraph "Data Storage"
-        P["In-Memory Maps<br/>Thread-Safe"]
-        Q["Redis Server<br/>Docker Container"]
+        N["Memory Storage<br/>In-Memory Maps"]
+        O["Redis Storage<br/>Redis Server"]
     end
     
     %% Connections
     A --> C
     B --> C
     C --> D
-    D --> E
-    E --> F
-    E --> G
-    E --> H
-    E --> I
+    D --> F
+    D --> G
+    D --> H
+    D --> I
     F --> J
     G --> J
     H --> J
@@ -61,15 +54,13 @@ graph TB
     J --> M
     M --> N
     M --> O
-    N --> P
-    O --> Q
 ```
 
 ## Core Components
 
 ### HTTP Layer
 - **Gin Framework**: Fast HTTP server with middleware support
-- **CORS + Logging**: Request handling and cross-origin support
+- **Middleware**: CORS, logging, recovery, and rate limiting (20 req/min per IP)
 - **REST API**: Four endpoints for URL operations
 
 ### Business Logic
@@ -121,5 +112,14 @@ Abstracts storage operations with two implementations:
 | **Persistence** | ❌ | ✅ |
 | **Multi-Instance** | ❌ | ✅ |
 | **Setup** | Zero config | Docker required |
+
+## Testing
+
+The system includes comprehensive testing:
+- **39 total tests** with 92.4% storage coverage
+- **Redis mocking** with miniredis for isolated testing
+- **Rate limiter tests** with concurrent request simulation
+- **Integration tests** covering all API endpoints
+- **Error scenario testing** for resilience verification
 
 The architecture is designed for simplicity and extensibility, making it easy to understand, test, and deploy. 
